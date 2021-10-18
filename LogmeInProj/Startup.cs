@@ -12,6 +12,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Formatters;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using System.Linq;
 
 
 namespace LogmeInProj
@@ -30,9 +39,21 @@ namespace LogmeInProj
         {
             services.AddDbContext<LastpassContext>(options => options.UseMySQL(Configuration.GetConnectionString("Default")));
             services.AddControllers();
+
             // Register the Swagger generator, defining 1 or more Swagger documents
             services.AddSwaggerGen();
+
+            services.AddControllersWithViews().AddNewtonsoftJson();
+            //patch request
+
+            services.AddControllersWithViews(options =>
+            {
+                options.InputFormatters.Insert(0, GetJsonPatchInputFormatter());
+            });
+             
+            
         }
+
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -58,6 +79,23 @@ namespace LogmeInProj
             {
                 endpoints.MapControllers();
             });
+        }
+
+       
+        private static NewtonsoftJsonPatchInputFormatter GetJsonPatchInputFormatter()
+        {
+            var builder = new ServiceCollection()
+                .AddLogging()
+                .AddMvc()
+                .AddNewtonsoftJson()
+                .Services.BuildServiceProvider();
+
+            return builder
+                .GetRequiredService<IOptions<MvcOptions>>()
+                .Value
+                .InputFormatters
+                .OfType<NewtonsoftJsonPatchInputFormatter>()
+                .First();
         }
     }
 }

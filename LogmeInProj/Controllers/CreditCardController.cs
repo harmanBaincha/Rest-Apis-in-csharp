@@ -1,12 +1,14 @@
-﻿using LogmeInProj.Models;
+﻿using LogmeInProj.Helpers;
+using LogmeInProj.Models;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+
+
 
 namespace LogmeInProj.Controllers
 {
@@ -27,65 +29,127 @@ namespace LogmeInProj.Controllers
 
         // GET: api/<CreditCardController>
         [HttpGet]
-        public IEnumerable<CreditCard> Get()
+        public IActionResult Get()
         {
-            var cards = _context.Creditcard.ToList();
-
-            return cards;
-        }
-
-        // GET api/<CreditCardController>/5674-897-2345
-        [HttpGet("{number}")]
-        public IEnumerable<CreditCard> Get(string number)
-        {
-            var cards = _context.Creditcard.Where(c => c.CardNumber.Equals(number)).ToList();
-
-            return cards;
-        }
-
-        // POST api/<CreditCardController>
-        [HttpPost]
-        public void Post([FromBody] string value)
-        {
-        
-        
-        }
-
-        // PUT api/<CreditCardController>/5
-        [HttpPut("{number}")]
-        public ActionResult Put(string number, [FromBody] CreditCard card)
-        {
-            var existingCard = _context.Creditcard.Where(c => c.CardNumber.Equals(number)).First();
-            if (existingCard != null)
+            try
             {
-                existingCard.CardType = card.CardType;
-                existingCard.CVV = card.CVV;
+                var cards = _context.Creditcard.ToList();
+                if (cards != null)
+                {
+                    List<CreditCard> decCardsList = new List<CreditCard>();
+                    foreach (var card in cards)
+                    {
+                        var decCardNumber = AesOperation.DecryptString(Keys.SKeys, card.CardNumber);
+                        var decCVV = AesOperation.DecryptString(Keys.SKeys, card.CVV);
+                        var newCard = new CreditCard { CreditCardID = card.CreditCardID, CardNumber = decCardNumber, CardType = card.CardType, CVV = decCVV, ExpiryDate=card.ExpiryDate};
+                        decCardsList.Add(newCard);
+                    }
+                    return Ok(decCardsList);
+                }
+                else
+                {
+                    return NotFound("Card not found");
+                }
 
+
+            }
+            catch (Exception e)
+            {
+                _logger.LogError("Exception thrown in Creditcard get operation  :" + e);
+                return BadRequest("Exception thrown in Creditcard get operation  :" + e);
+            }
+        }
+
+        // GET api/<CreditCardController>/2
+        [HttpGet("{id}")]
+        public IActionResult Get(int id)
+        {
+            try
+            {
+                var cards = _context.Creditcard.Where(c => c.CreditCardID == id).ToList();
+                if (cards != null)
+                {
+                    List<CreditCard> decCardsList = new List<CreditCard>();
+                    foreach (var card in cards)
+                    {
+                        var decCardNumber = AesOperation.DecryptString(Keys.SKeys, card.CardNumber);
+                        var decCVV = AesOperation.DecryptString(Keys.SKeys, card.CVV);
+                        var newCard = new CreditCard { CreditCardID = card.CreditCardID, CardNumber = decCardNumber, CardType = card.CardType, CVV = decCVV, ExpiryDate=card.ExpiryDate};
+                        decCardsList.Add(newCard);
+                    }
+                    return Ok(decCardsList);
+                }
+                else
+                {
+                    return NotFound("Card not found");
+                }
+
+            }
+            catch (Exception e)
+            {
+                _logger.LogError("Exception thrown in Creditcard get operation with id " + id + " :" + e);
+                return BadRequest("Exception thrown in Creditcard get operation with id " + id + " :" + e);
+            }
+        }
+
+
+
+        [HttpPatch("{id}")]
+        public IActionResult Patch(int id, [FromBody] JsonPatchDocument<CreditCard> patchEntity)
+        {
+            try
+            {
+                var entity = _context.Creditcard.FirstOrDefault(card => card.CreditCardID == id);
+
+                if (entity == null)
+                {
+                    return NotFound("Not Found");
+                }
+
+                foreach (var op in patchEntity.Operations)
+                {
+                    if (op.path.ToString() == "/CardNumber" || op.path.ToString() == "/CVV")
+                    {
+                        op.value = AesOperation.EncryptString(Keys.SKeys, op.value.ToString());
+                    }
+                }
+
+                patchEntity.ApplyTo(entity, ModelState); 
                 _context.SaveChanges();
+                return Ok("Card updated");
             }
-            else
+            catch (Exception e)
             {
-                return NotFound();
+                _logger.LogError("Exception thrown in Creditcard patch operation with id " + id + " :" + e);
+                return BadRequest("Exception thrown in Creditcard patch operation with id " + id + " :" + e);
             }
-
-            return Ok();
         }
+
 
         // DELETE api/<CreditCardController>/5
-        [HttpDelete("{number}")]
-        public ActionResult Delete(string number)
+        [HttpDelete("{id}")]
+        public IActionResult Delete(int id)
         {
-            var existingCard = _context.Creditcard.Where(c => c.CardNumber == number).FirstOrDefault<CreditCard>();
-            if (existingCard != null)
+            try
             {
-                _context.Remove(existingCard);
-                _context.SaveChanges();
+                var existingCard = _context.Creditcard.Where(c => c.CreditCardID == id).FirstOrDefault<CreditCard>();
+                if (existingCard != null)
+                {
+                    _context.Remove(existingCard);
+                    _context.SaveChanges();
+                    return Ok("Card Removed");
+                }
+                else
+                {
+                    return NotFound();
+                }
             }
-            else
+            catch (Exception e)
             {
-                return NotFound();
+                _logger.LogError("Exception thrown in Creditcard delete operation with id " + id + " :" + e);
+                return BadRequest("Exception thrown in Creditcard delete operation with id " + id + " :" + e);
+
             }
-            return Ok();
         }
     }
 }

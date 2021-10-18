@@ -1,13 +1,13 @@
-﻿using LogmeInProj.Models;
+﻿using LogmeInProj.Helpers;
+using LogmeInProj.Models;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
 namespace LogmeInProj.Controllers
 {
@@ -28,82 +28,194 @@ namespace LogmeInProj.Controllers
 
         // GET: api/<CustomerController>
         [HttpGet]
-        public IEnumerable<Customer> Get()
+        public IActionResult Get()
         {
-            var customers = _context.Customer.Include(c => c.Cards).ToList();
             
-            return customers;
+            try
+            {
+                var customers = _context.Customer.Include(c => c.Cards).ToList();
+                List<Customer> custList = new List<Customer>();
+                foreach(var cust in customers)
+                {
+                    var cards = cust.Cards;
+                    
+                    if (cards != null)
+                    {
+                        List<CreditCard> decCardsList = new List<CreditCard>();
+                        foreach (var card in cards)
+                        {
+                            var decCardNumber = AesOperation.DecryptString(Keys.SKeys, card.CardNumber);
+                            var decCVV = AesOperation.DecryptString(Keys.SKeys, card.CVV);
+                            var newCard = new CreditCard { CreditCardID = card.CreditCardID, CardNumber =decCardNumber, CardType = card.CardType, CVV = decCVV, ExpiryDate=card.ExpiryDate };
+                            decCardsList.Add(newCard);
+                        }
+                        var newCust = new Customer { CustId = cust.CustId, Name = cust.Name, Address = cust.Address, DoB = cust.DoB, Cards = decCardsList };
+                        custList.Add(newCust);
+                    }
+                    else
+                    {
+                        var newCust = new Customer { CustId = cust.CustId, Name = cust.Name, Address = cust.Address, DoB = cust.DoB };
+                        custList.Add(newCust);
+                    }
+                }
+                return Ok(custList);
+            }
+            catch(Exception e){
+                _logger.LogError("Exception thrown in Customer get operation" + e);
+                return BadRequest("Exception thrown in Customer get operation" + e);
+            }
+            
         }
 
         // GET api/<CustomerController>/5
         [HttpGet("{id}")]
-        public IEnumerable<Customer> Get(int id)
+        public IActionResult Get(int id)
         {
-            var customers = _context.Customer.Where(c => c.CustId == id).Include(c => c.Cards).ToList();
+            try
+            {
+                var customers = _context.Customer.Where(c => c.CustId == id).Include(c => c.Cards).ToList();
+                List<Customer> custList = new List<Customer>();
+                foreach (var cust in customers)
+                {
+                    var cards = cust.Cards;
 
-            return customers;
+                    if (cards != null)
+                    {
+                        List<CreditCard> decCardsList = new List<CreditCard>();
+                        foreach (var card in cards)
+                        {
+                            var decCardNumber = AesOperation.DecryptString(Keys.SKeys, card.CardNumber);
+                            var decCVV = AesOperation.DecryptString(Keys.SKeys, card.CVV);
+                            var newCard = new CreditCard { CreditCardID = card.CreditCardID, CardNumber = decCardNumber, CardType = card.CardType, CVV = decCVV, ExpiryDate=card.ExpiryDate };
+                            decCardsList.Add(newCard);
+                        }
+                        var newCust = new Customer { CustId = cust.CustId, Name = cust.Name, Address = cust.Address, DoB = cust.DoB, Cards = decCardsList };
+                        custList.Add(newCust);
+                    }
+                    else
+                    {
+                        var newCust = new Customer { CustId = cust.CustId, Name = cust.Name, Address = cust.Address, DoB = cust.DoB };
+                        custList.Add(newCust);
+                    }
+                }
+                return Ok(custList);
+
+
+                
+            }
+            catch(Exception e)
+            {
+                _logger.LogError("Exception thrown in Customer get operation with id "+ id +" :"+ e);
+                return BadRequest("Exception thrown in Customer get operation with id " + id + " :" + e);
+            }
         }
 
         // POST api/<CustomerController>
         [HttpPost]
         public ActionResult Post([FromBody] Customer cust)
         {
-            var customer = _context.Customer;
-            customer.Add(new Customer { CustId = cust.CustId, Name = cust.Name, Address = cust.Address, DoB = cust.DoB });
-            _context.SaveChanges();
-            return Ok();
+            try
+            {
+                var customer = _context.Customer;
+                var cards = cust.Cards;
+                if (cards != null)
+                {
+                    List<CreditCard> encCardsList = new List<CreditCard>();
+                    foreach (var card in cards)
+                    {
+                        var encrpytcardNumber = AesOperation.EncryptString(Keys.SKeys, card.CardNumber);
+                        var encrpytCVV = AesOperation.EncryptString(Keys.SKeys, card.CVV);
+                        var newCard = new CreditCard { CreditCardID = card.CreditCardID, CardNumber = encrpytcardNumber, CardType = card.CardType, CVV = encrpytCVV, ExpiryDate=card.ExpiryDate };
+                        encCardsList.Add(newCard);
+                    }
+                    customer.Add(new Customer { CustId = cust.CustId, Name = cust.Name, Address = cust.Address, DoB = cust.DoB, Cards = encCardsList });
+                    _context.SaveChanges();
+                }
+                else
+                {
+                    customer.Add(new Customer { CustId = cust.CustId, Name = cust.Name, Address = cust.Address, DoB = cust.DoB });
+                    _context.SaveChanges();
+                }
+                return Ok("Customer added");
+            }
+            catch(Exception e)
+            {
+                _logger.LogError("Exception thrown in Customer post operation with object " + cust + " :" + e);
+                return BadRequest("Exception thrown in Customer post operation with object " + cust + " :" + e);
+            }
         }
 
-        // PUT api/<CustomerController>/5
-        [HttpPut("{id}")]
-        public ActionResult Put(int id, [FromBody] Customer cust)
-        {
-            var existingCust = _context.Customer.Where(c => c.CustId == id).FirstOrDefault<Customer>();
-            if (existingCust != null)
-            {
-                existingCust.Name = cust.Name;
-                existingCust.Address = cust.Address;
-
-                _context.SaveChanges();
-            }
-            else
-            {
-                return NotFound();
-            }
         
 
-        return Ok();
-    }
+        //Patch request
+        [HttpPatch("{id}")]
+        public IActionResult JsonPatchWithModelState(int id, [FromBody] JsonPatchDocument<Customer> patchEntity)
+        {
+            try
+            {
+                var customer = _context.Customer.Include(c => c.Cards).FirstOrDefault(cust => cust.CustId == id);
+
+                if (customer == null)
+                {
+                    return NotFound("Customer not found");
+                }
+                else
+                {
+                    var i = 0;
+                    foreach (var op in patchEntity.Operations)
+                    {
+                        if (op.path.ToString() == "/Cards/"+i+"/CardNumber" || op.path.ToString() == "/Cards/" + i + "/CVV")
+                        {
+                            op.value = AesOperation.EncryptString(Keys.SKeys, op.value.ToString());
+                        }
+                        i = i + 1;
+                    }
+                }
+
+                patchEntity.ApplyTo(customer, ModelState); // Must have Microsoft.AspNetCore.Mvc.NewtonsoftJson installed
+                _context.SaveChanges();
+                return Ok("Customer updated");
+            }
+            catch(Exception e)
+            {
+                _logger.LogError("Exception thrown in Customer patch operation with id " + id + " :" + e);
+                return BadRequest("Exception thrown in Customer patch operation with id " + id + " :" + e);
+            }
+        }
 
         // DELETE api/<CustomerController>/5
         [HttpDelete("{id}")]
-        public ActionResult Delete(int id)
+        public IActionResult Delete(int id)
         {
-            
-            var existingCust = _context.Customer.Where(c => c.CustId == id).FirstOrDefault<Customer>();
-            
-            
-            if (existingCust != null)
+            try
             {
+                var existingCust = _context.Customer.Where(c => c.CustId == id).FirstOrDefault<Customer>();
 
-                var cards = _context.Creditcard.Where(cc => EF.Property<int>(cc, "CustomerCustId") == id);
-                if (cards != null)
+
+                if (existingCust != null)
                 {
-                    foreach (var card in cards)
-                    {
-                        existingCust.Cards.Remove(card);
-                        _context.Remove(card);
 
+                    var cards = _context.Creditcard.Where(cc => EF.Property<int>(cc, "CustomerCustId") == id);
+                    if (cards != null)
+                    {
+                        foreach (var card in cards)
+                        {
+                            existingCust.Cards.Remove(card);
+                            _context.Remove(card);
+
+                        }
                     }
+                    _context.Remove(existingCust);
+                    _context.SaveChanges();
                 }
-                _context.Remove(existingCust);
-                _context.SaveChanges();
+                return Ok("Customer deleted");
             }
-            else
+            catch(Exception e)
             {
-                return NotFound();
+                _logger.LogError("Exception thrown in Customer delete operation with id " + id + " :" + e);              
+                return BadRequest("Exception thrown in Customer delete operation with id " + id + " :" + e);
             }
-            return Ok();
+            
         }
     }
 }

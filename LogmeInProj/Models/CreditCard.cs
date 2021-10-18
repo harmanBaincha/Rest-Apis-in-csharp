@@ -13,7 +13,7 @@ namespace LogmeInProj.Models
         [Key]
         public int CreditCardID { get; set; }
 
-        public SecureString CardNumber { get; set; }
+        public string CardNumber { get; set; }
         public Type CardType { get; set; }
         public string ExpiryDate { get; set; }
         public string CVV { get; set; }
